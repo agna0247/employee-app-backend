@@ -10,10 +10,11 @@ app.use(express.urlencoded({ extended: true }));
 
 const path=require('path');
 app.use(express.static(path.join(__dirname+'/dist/FrontEnd')));
+app.use(express.static(path.join(__dirname, 'dist', 'Frontend')));
 // Task2: create mongoDB connection 
 const mongoose = require('mongoose');
 
-const MONGODB_URI = process.env.MONGODB_URI || process.env.MONGO_URI;
+const MONGODB_URI = process.env.MONGODB_URI || process.env.MONGO_URI || 'mongodb+srv://agna225502_db_user:Agnajyomi9@cluster0.hbwodbo.mongodb.net/EmployeeDB?retryWrites=true&w=majority';
 
 if (MONGODB_URI) {
     mongoose.connect(MONGODB_URI)
@@ -70,10 +71,12 @@ const getAllEmployees = async (req, res) => {
 const getEmployeeById = async (req, res) => {
     try {
         const { id } = req.params;
-        if (!isValidId(id)) {
-            return res.status(400).json({ error: 'Invalid employee ID format' });
+        let employee = null;
+        if (isValidId(id)) {
+            employee = await Employee.findById(id);
+        } else {
+            employee = await Employee.findOne({ name: id });
         }
-        const employee = await Employee.findById(id);
         if (!employee) {
             return res.status(404).json({ error: 'Employee not found' });
         }
@@ -104,11 +107,19 @@ const addEmployee = async (req, res) => {
 
 const deleteEmployee = async (req, res) => {
     try {
-        const { id } = req.params;
-        if (!isValidId(id)) {
-            return res.status(400).json({ error: 'Invalid employee ID format' });
+        const id = req.params.id || req.body._id || req.body.id;
+        let deletedEmployee;
+        if (id) {
+            if (!isValidId(id)) {
+                return res.status(400).json({ error: 'Invalid employee ID format' });
+            }
+            deletedEmployee = await Employee.findByIdAndDelete(id);
+        } else if (req.body.name) {
+            deletedEmployee = await Employee.findOneAndDelete({ name: req.body.name });
+        } else {
+            return res.status(400).json({ error: 'Employee ID or name is required' });
         }
-        const deletedEmployee = await Employee.findByIdAndDelete(id);
+
         if (!deletedEmployee) {
             return res.status(404).json({ error: 'Employee not found' });
         }
@@ -121,24 +132,31 @@ const deleteEmployee = async (req, res) => {
 const updateEmployee = async (req, res) => {
     try {
         const id = req.params.id || req.body._id || req.body.id;
-        if (!id) {
-            return res.status(400).json({ error: 'Employee ID is required for update' });
-        }
-        if (!isValidId(id)) {
-            return res.status(400).json({ error: 'Invalid employee ID format' });
-        }
-
         const updateData = {};
         if (req.body.name !== undefined) updateData.name = req.body.name;
         if (req.body.location !== undefined) updateData.location = req.body.location;
         if (req.body.position !== undefined) updateData.position = req.body.position;
         if (req.body.salary !== undefined) updateData.salary = Number(req.body.salary);
 
-        const updatedEmployee = await Employee.findByIdAndUpdate(
-            id,
-            updateData,
-            { new: true, runValidators: true }
-        );
+        let updatedEmployee;
+        if (id) {
+            if (!isValidId(id)) {
+                return res.status(400).json({ error: 'Invalid employee ID format' });
+            }
+            updatedEmployee = await Employee.findByIdAndUpdate(
+                id,
+                updateData,
+                { new: true, runValidators: true }
+            );
+        } else if (req.body.name) {
+            updatedEmployee = await Employee.findOneAndUpdate(
+                { name: req.body.name },
+                updateData,
+                { new: true, runValidators: true }
+            );
+        } else {
+            return res.status(400).json({ error: 'Employee ID or name is required for update' });
+        }
 
         if (!updatedEmployee) {
             return res.status(404).json({ error: 'Employee not found' });
@@ -164,7 +182,9 @@ app.post('/employees', addEmployee);
 
 //TODO: delete a employee data from db by using api '/api/employeelist/:id'
 app.delete('/api/employeelist/:id', deleteEmployee);
+app.delete('/api/employeelist', deleteEmployee);
 app.delete('/employees/:id', deleteEmployee);
+app.delete('/employees', deleteEmployee);
 
 //TODO: Update  a employee data from db by using api '/api/employeelist'
 //Request body format:{name:'',location:'',position:'',salary:''}
